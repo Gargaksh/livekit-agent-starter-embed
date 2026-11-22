@@ -1,5 +1,7 @@
 name: AT006 original narration automatic ASR QC, no paid provider
 on:
+  push:
+    branches: [ahatrove-at006-voice-audition-20261123]
   workflow_dispatch:
 jobs:
   asr:
@@ -7,20 +9,9 @@ jobs:
     timeout-minutes: 20
     permissions:
       actions: read
-      contents: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
-      - name: Write private GitHub Actions ASR run pointer for inspection
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p AhaTrove/AT006
-          printf '{"run_id":%s,"status":"ASR_QUEUED","source_artifact_id":14774306565,"voice_release_approved":false}\n' "${GITHUB_RUN_ID}" > AhaTrove/AT006/last_asr_run.json
-          git config user.name "AhaTrove run metadata"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add AhaTrove/AT006/last_asr_run.json
-          git commit -m 'Record AT006 voice ASR QC run pointer [skip ci]'
-          git push origin HEAD:refs/heads/ahatrove-at006-voice-audition-20261123
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
