@@ -29,7 +29,7 @@ jobs:
           Path('AhaTrove/AT006/last_voice_audition_run.json').write_text(json.dumps(out,indent=2)+'\n')
           print(json.dumps(out))
           z=json.loads(Path('/tmp/at006_asr_runs.json').read_text())
-          rr=[r for r in z.get('workflow_runs',[]) if r.get('head_sha')=='909f50d6cd2d899abc7aec0470baf2055779db95']
+          rr=[r for r in z.get('workflow_runs',[]) if r.get('head_branch')=='ahatrove-at006-voice-audition-20261123'][:10]
           result={'role':'READ_ONLY_ASR_RUN_INDEX','source_commit':'909f50d6cd2d899abc7aec0470baf2055779db95','fetched_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'runs':[{'id':r['id'],'status':r.get('status'),'conclusion':r.get('conclusion'),'url':r.get('html_url')} for r in rr],'not_audio_release_approval':True}
           Path('AhaTrove/AT006/last_asr_run_index.json').write_text(json.dumps(result,indent=2)+'\\n')
           print(json.dumps(result))
