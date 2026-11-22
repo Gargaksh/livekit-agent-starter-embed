@@ -1,0 +1,74 @@
+name: AhaTrove AT006 no-spend narration audition
+on:
+  push:
+    branches: [ahatrove-at006-voice-audition-20261123]
+  workflow_dispatch:
+jobs:
+  audition:
+    runs-on: ubuntu-latest
+    timeout-minutes: 28
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install upstream Chatterbox on CPU, no paid provider
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -U pip
+          python -m pip install --no-cache-dir 'torch==2.6.0' 'torchaudio==2.6.0' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --no-cache-dir chatterbox-tts
+      - name: Generate original AT-006 narration candidate, not publishable
+        env:
+          HF_HUB_DISABLE_TELEMETRY: '1'
+          TORCH_NUM_THREADS: '2'
+          OMP_NUM_THREADS: '2'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib, json, time, wave
+          from pathlib import Path
+          import torch,torchaudio
+          from chatterbox.tts import ChatterboxTTS
+          torch.set_num_threads(2)
+          torch.manual_seed(26061123)
+          segments = ["Why are flamingos pink, when their chicks begin life pale gray?","The answer starts with their food.","In shallow water, flamingos turn their heads upside down and filter out algae and tiny animals.","These foods can contain carotenoids: natural pigments that create yellow, orange, and red colors.","As flamingos digest their meals, these pigments are processed and become part of their growing feathers.","That's how their plumage develops shades from soft pink to brilliant coral.","Chicks don't hatch with that famous color. It appears gradually as they grow.","And there's one more surprise. Researchers found that greater flamingos spread pigment-rich oil from a gland onto their feathers, making them look even redder.","So a flamingo's color isn't painted on. It comes from what the bird eats—and sometimes from its own natural feather makeup."]
+          print("This is a non-publishable voice audition only. User audio comparison pending.", flush=True)
+          model=ChatterboxTTS.from_pretrained(device="cpu")
+          audio=[]; manifest=[]; sr=model.sr; cursor=0
+          pause=torch.zeros((1,round(sr*0.15)),dtype=torch.float32)
+          for i,s in enumerate(segments):
+              t=time.time()
+              with torch.no_grad():
+                  wav=model.generate(s)
+              wav=wav.detach().to("cpu").float()
+              if wav.ndim==1: wav=wav.unsqueeze(0)
+              if wav.shape[0]!=1: wav=wav.mean(dim=0,keepdim=True)
+              wav=wav.clamp(-1,1)
+              if wav.shape[-1]<sr//2: raise RuntimeError(f"audio too short for segment {i}")
+              if not torch.isfinite(wav).all():raise RuntimeError("nonfinite output")
+              frame_end=cursor+wav.shape[-1]
+              manifest.append({"segment":i+1,"text":s,"start_s":round(cursor/sr,3),"end_s":round(frame_end/sr,3),"duration_s":round(wav.shape[-1]/sr,3),"generation_s":round(time.time()-t,2),"status":"audition_only_unverified_speech"})
+              audio.extend([wav,pause])
+              cursor=frame_end+pause.shape[-1]
+              print(f"segment {i+1}/{len(segments)} {manifest[-1]['duration_s']}s generated in {manifest[-1]['generation_s']}s",flush=True)
+          out=torch.cat(audio,dim=-1)
+          torchaudio.save("AT006_NEURAL_VOICE_AUDITION_ONLY.wav",out,sr)
+          Path("AT006_AUDIO_CUES_UNVERIFIED.json").write_text(json.dumps({"film":"AT-006","voice_provider":"resemble-ai/chatterbox","purpose":"local comparative audition; NOT publication approved","sample_rate":sr,"segment_cues":manifest,"total_s":round(out.shape[-1]/sr,3),"unverified":True},indent=2))
+          Path("AT006_EXACT_SCRIPT.txt").write_text("\n".join(segments)+"\n")
+          print("full_seconds",round(out.shape[-1]/sr,3),flush=True)
+          for f in ["AT006_NEURAL_VOICE_AUDITION_ONLY.wav","AT006_AUDIO_CUES_UNVERIFIED.json","AT006_EXACT_SCRIPT.txt"]:
+           print(f,hashlib.sha256(Path(f).read_bytes()).hexdigest(),flush=True)
+          PY
+      - name: Preserve candidate and exact cues for external listening QA
+        uses: actions/upload-artifact@v4
+        with:
+          name: AT006-neural-narration-AUDITION-only
+          path: |
+            AT006_NEURAL_VOICE_AUDITION_ONLY.wav
+            AT006_AUDIO_CUES_UNVERIFIED.json
+            AT006_EXACT_SCRIPT.txt
+          retention-days: 2
