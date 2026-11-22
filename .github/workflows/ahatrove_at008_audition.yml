@@ -1,0 +1,45 @@
+name: AhaTrove AT008 neural audition ONLY
+on:
+  push:
+    branches:
+      - ahatrove-at008-voice-20261123
+    paths:
+      - .github/workflows/ahatrove_at008_audition.yml
+      - production/ahatrove/at008_voice_audition.py
+  workflow_dispatch:
+jobs:
+  audition:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      TOKENIZERS_PARALLELISM: "false"
+      OMP_NUM_THREADS: "2"
+      TORCH_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pin Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Reuse proven no-API inference install path
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --no-cache-dir 'torch==2.6.0' 'torchaudio==2.6.0' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --no-cache-dir 'chatterbox-tts==0.1.7'
+      - name: Generate 22 review-only source-matched voice phrases
+        shell: bash
+        run: |
+          set -euo pipefail
+          python production/ahatrove/at008_voice_audition.py
+      - name: Archive evidence for audible review; NEVER publish
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: AT008-Neural-Audition-REVIEW-ONLY
+          path: at008_neural_audition/
+          if-no-files-found: error
+          retention-days: 1
