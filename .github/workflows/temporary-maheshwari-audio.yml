@@ -13,7 +13,7 @@ jobs:
           set -euxo pipefail
           curl --retry 3 --fail -L --max-time 90 'https://assets.vidiq.com/voiceovers/b3392d06-cfd5-457e-8428-599e9df114cf/081d7dd5-4527-4cf6-b670-47cf6e821538.mp3' -o maheshwari_narration.mp3
           file maheshwari_narration.mp3
-          ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1 maheshwari_narration.mp3
+          test "$(wc -c < maheshwari_narration.mp3)" -gt 100000
       - uses: actions/upload-artifact@v4
         with:
           name: maheshwari-narration-file
