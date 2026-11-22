@@ -1,0 +1,34 @@
+name: AhaTrove AT006 run receipt index (no generation)
+on:
+  push:
+    branches: [ahatrove-at006-voice-audition-20261123]
+jobs:
+  index:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Index original separate no-spend voice-audition run ID into private branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p AhaTrove/AT006
+          gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ahatrove-at006-audition.yml/runs?branch=ahatrove-at006-voice-audition-20261123&per_page=25" > /tmp/at006_runs.json
+          python - <<'PY'
+          import json,datetime
+          from pathlib import Path
+          x=json.loads(Path('/tmp/at006_runs.json').read_text())
+          run=[r for r in x.get('workflow_runs',[]) if r.get('head_sha')=='889290a9dd9ec502db9900fd15ef1a9cc3dbbeaf']
+          out={'role':'READ_ONLY_PRODUCTION_STATUS','source_commit':'889290a9dd9ec502db9900fd15ef1a9cc3dbbeaf','fetched_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'run_ids':[{'id':r['id'],'status':r.get('status'),'conclusion':r.get('conclusion'),'url':r.get('html_url')} for r in run],'not_a_voice_or_rights_approval':True}
+          Path('AhaTrove/AT006/last_voice_audition_run.json').write_text(json.dumps(out,indent=2)+'\n')
+          print(json.dumps(out))
+          PY
+          git config user.name "AhaTrove automated run index"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add AhaTrove/AT006/last_voice_audition_run.json
+          if ! git diff --cached --quiet; then git commit -m "Record original AT006 audition run pointer [skip ci]"; git push origin HEAD:refs/heads/ahatrove-at006-voice-audition-20261123; fi
