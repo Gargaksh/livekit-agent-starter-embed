@@ -1,7 +1,5 @@
 name: AhaTrove AT006 no-spend narration audition
 on:
-  push:
-    branches: [ahatrove-at006-voice-audition-20261123]
   workflow_dispatch:
 jobs:
   audition:
