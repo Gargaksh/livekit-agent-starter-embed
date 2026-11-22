@@ -1,12 +1,12 @@
 {
   "role": "READ_ONLY_PRODUCTION_STATUS",
   "source_commit": "889290a9dd9ec502db9900fd15ef1a9cc3dbbeaf",
-  "fetched_utc": "2026-11-22T21:42:05.943639+00:00",
+  "fetched_utc": "2026-11-22T21:44:23.408140+00:00",
   "run_ids": [
     {
       "id": 45073074487,
-      "status": "in_progress",
-      "conclusion": null,
+      "status": "completed",
+      "conclusion": "success",
       "url": "https://github.com/Gargaksh/livekit-agent-starter-embed/actions/runs/45073074487"
     }
   ],
