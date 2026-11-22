@@ -1,0 +1,9 @@
+# AhaTrove AT-001 voice gate (non-publishing)
+
+This private, isolated branch was created after review of original AT-001 preproduction, the shared renderer report and successful [4.92s Chatterbox test GitHub Actions run](https://github.com/Gargaksh/livekit-agent-starter-embed/actions/runs/45071742539). The test **does not** approve the model's default voice or the full 131-word narration.
+
+The standalone `voice_pipeline.py` locks the exact 20 phrases from the source-approved script, supports no-network dry-run without TTS, and can generate actual phrase WAVs, 48 kHz total narration, phrase-level SRT and honest QA manifest on a **confirmed zero-incremental-charge** CPU host with `torch==2.6.0+cpu`, matching torchaudio and `chatterbox-tts` installed. No voice synthesis has been run from this branch; no GitHub Actions run was triggered.
+
+Do not confuse phrase-level timestamp joins with independently ASR-validated word boundaries. DO NOT use external reference voice clips or clone named people without express license. The original English Chatterbox code and checkpoint are MIT-tagged upstream; default speaker training/provenance and actual commercial release decision still need a documented sign-off. Test against Maheshwari V3 for human-perceived naturalness and check all words, silences, pace and artifacts. Editorial target is 45–60s. If the duration fails, revise pacing and re-record before film cuts; never mark pass automatically.
+
+5 staged hero images, 7 image rejections, the original composed 60s sound bed and detailed rights/quality audit are bundled separately as evidence. AT-001 **no final MP4**. No publishing, no paid APIs, no permission to spend runner minutes beyond free allocation. Project source: https://chatgpt.com/space/page_acf7131a6568819187238c4ff5801be9 . Central tower: https://chatgpt.com/space/page_bec9eb9a51608191867659b6f625e42a .
