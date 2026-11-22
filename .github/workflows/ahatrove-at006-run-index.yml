@@ -19,6 +19,7 @@ jobs:
           set -euo pipefail
           mkdir -p AhaTrove/AT006
           gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ahatrove-at006-audition.yml/runs?branch=ahatrove-at006-voice-audition-20261123&per_page=25" > /tmp/at006_runs.json
+          gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ahatrove-at006-asr-qa.yml/runs?branch=ahatrove-at006-voice-audition-20261123&per_page=25" > /tmp/at006_asr_runs.json
           python - <<'PY'
           import json,datetime
           from pathlib import Path
@@ -27,8 +28,13 @@ jobs:
           out={'role':'READ_ONLY_PRODUCTION_STATUS','source_commit':'889290a9dd9ec502db9900fd15ef1a9cc3dbbeaf','fetched_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'run_ids':[{'id':r['id'],'status':r.get('status'),'conclusion':r.get('conclusion'),'url':r.get('html_url')} for r in run],'not_a_voice_or_rights_approval':True}
           Path('AhaTrove/AT006/last_voice_audition_run.json').write_text(json.dumps(out,indent=2)+'\n')
           print(json.dumps(out))
+          z=json.loads(Path('/tmp/at006_asr_runs.json').read_text())
+          rr=[r for r in z.get('workflow_runs',[]) if r.get('head_sha')=='909f50d6cd2d899abc7aec0470baf2055779db95']
+          result={'role':'READ_ONLY_ASR_RUN_INDEX','source_commit':'909f50d6cd2d899abc7aec0470baf2055779db95','fetched_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'runs':[{'id':r['id'],'status':r.get('status'),'conclusion':r.get('conclusion'),'url':r.get('html_url')} for r in rr],'not_audio_release_approval':True}
+          Path('AhaTrove/AT006/last_asr_run_index.json').write_text(json.dumps(result,indent=2)+'\\n')
+          print(json.dumps(result))
           PY
           git config user.name "AhaTrove automated run index"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add AhaTrove/AT006/last_voice_audition_run.json
+          git add AhaTrove/AT006/last_voice_audition_run.json AhaTrove/AT006/last_asr_run_index.json
           if ! git diff --cached --quiet; then git commit -m "Record original AT006 audition run pointer [skip ci]"; git push origin HEAD:refs/heads/ahatrove-at006-voice-audition-20261123; fi
