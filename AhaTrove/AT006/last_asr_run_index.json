@@ -1,0 +1,14 @@
+{
+  "role": "READ_ONLY_ASR_RUN_INDEX",
+  "source_commit": "909f50d6cd2d899abc7aec0470baf2055779db95",
+  "fetched_utc": "2026-11-22T21:45:23.297008+00:00",
+  "runs": [
+    {
+      "id": 45073761222,
+      "status": "completed",
+      "conclusion": "failure",
+      "url": "https://github.com/Gargaksh/livekit-agent-starter-embed/actions/runs/45073761222"
+    }
+  ],
+  "not_audio_release_approval": true
+}\n
