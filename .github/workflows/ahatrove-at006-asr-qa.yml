@@ -1,7 +1,5 @@
 name: AT006 original narration automatic ASR QC, no paid provider
 on:
-  push:
-    branches: [ahatrove-at006-voice-audition-20261123]
   workflow_dispatch:
 jobs:
   asr:
