@@ -53,7 +53,10 @@ for idx,text in enumerate(phrases,1):
         wav=model.generate(text,exaggeration=0.60,cfg_weight=0.35)
     a=wav.detach().cpu().flatten().numpy().astype(np.float32)
     assert len(a)>sr//3 and np.isfinite(a).all()
-    assert float(np.max(np.abs(a)))<1.01
+    raw_peak=float(np.max(np.abs(a)))
+    assert raw_peak>0.002, "Silent or broken neural audio"
+    if raw_peak>0.93:
+        a=a*(0.93/raw_peak)
     peak=float(np.max(np.abs(a)))
     rms=float(np.sqrt(np.mean(a*a)))
     # Natural sentence punctuation gets a slightly longer breath.
@@ -68,7 +71,7 @@ for idx,text in enumerate(phrases,1):
     start=cursor/sr
     end=start+len(a)/sr
     cursor+=len(a)+int(gap*sr)
-    timings.append(dict(scene=idx,text=text,start_seconds=round(start,4),end_seconds=round(end,4),pause_seconds=gap,peak=round(peak,4),rms=round(rms,4),sample_rate=sr))
+    timings.append(dict(scene=idx,text=text,start_seconds=round(start,4),end_seconds=round(end,4),pause_seconds=gap,peak=round(peak,4),raw_peak=round(raw_peak,4),rms=round(rms,4),sample_rate=sr))
     chunks.extend([a,np.zeros(int(gap*sr),np.float32)])
     print("PHRASE",idx,round(end-start,2),"elapsed",round(time.time()-t,1),text,flush=True)
 audio=np.concatenate(chunks)
