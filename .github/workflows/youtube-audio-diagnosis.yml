@@ -1,0 +1,51 @@
+name: Diagnose public YouTube Short audio
+on:
+  push:
+    branches: [youtube-audio-diagnosis-20261123]
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Probe official Short stream and audio
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python -m pip install --quiet --user yt-dlp imageio-ffmpeg
+          export PATH="$HOME/.local/bin:$PATH"
+          python - <<'PY'
+          import yt_dlp, json
+          url = "https://www.youtube.com/shorts/p7mPaZCIu-Y"
+          try:
+            with yt_dlp.YoutubeDL({'quiet': True, 'no_warnings': False, 'skip_download':True, 'ignore_no_formats_error':True}) as yd:
+              info=yd.extract_info(url,download=False)
+            result={'title':info.get('title'),'id':info.get('id'),'duration':info.get('duration'),'channel':info.get('channel'),'live_status':info.get('live_status'),'availability':info.get('availability'),'formats':[{'format_id':f.get('format_id'),'ext':f.get('ext'),'vcodec':f.get('vcodec'),'acodec':f.get('acodec'),'abr':f.get('abr'),'asr':f.get('asr'),'protocol':f.get('protocol')} for f in info.get('formats',[])]}
+            print('PROBE_JSON='+json.dumps(result,ensure_ascii=False)[:25000])
+          except Exception as e:
+            print('PROBE_ERROR='+str(e))
+          PY
+          echo "DOWNLOADING"
+          yt-dlp --no-playlist --no-warnings -f 'bv*+ba/best' --merge-output-format mp4 -o 'short.%(ext)s' 'https://www.youtube.com/shorts/p7mPaZCIu-Y' || echo "DOWNLOAD_BLOCKED"
+          python - <<'PY'
+          import os,glob, subprocess, imageio_ffmpeg
+          files=[f for f in glob.glob('short.*') if f.endswith(('.mp4','.webm','.mkv'))]
+          print('DOWNLOADED_FILES='+repr([(f,os.path.getsize(f)) for f in files]))
+          if not files: raise SystemExit(0)
+          ff=imageio_ffmpeg.get_ffmpeg_exe()
+          p=subprocess.run([ff,'-hide_banner','-i',files[0],'-f','null','-'],text=True,capture_output=True)
+          print('STREAMS='+p.stderr[:10000])
+          q=subprocess.run([ff,'-hide_banner','-i',files[0],'-vn','-af','volumedetect','-f','null','-'],text=True,capture_output=True)
+          print('VOLUME='+q.stderr[-2400:])
+          PY
+      - name: Save downloaded video only when available for diagnostic QA
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-short-audio-diagnostic
+          path: |
+            short.mp4
+            short.webm
+            short.mkv
+          if-no-files-found: ignore
+          retention-days: 1
