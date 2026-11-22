@@ -1,0 +1,58 @@
+name: AhaTrove TTS open-source audition (no channel content)
+on:
+  push:
+    branches: [ahatrove-chatterbox-eval-20261123]
+  workflow_dispatch:
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Verify model host and runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          df -h .
+          curl --max-time 20 --fail --silent --show-error --location --head 'https://huggingface.co/ResembleAI/chatterbox/resolve/main/README.md' | head -15
+          curl --max-time 20 --fail --silent --show-error --location --head 'https://pypi.org/simple/chatterbox-tts/' | head -10
+      - name: Install MIT voice for evaluation only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -U pip
+          python -m pip install --no-cache-dir 'torch==2.6.0' 'torchaudio==2.6.0' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --no-cache-dir 'chatterbox-tts'
+      - name: Synthesize harmless original demo phrase
+        shell: bash
+        env:
+          HF_HUB_DISABLE_TELEMETRY: '1'
+          TORCH_NUM_THREADS: '2'
+          OMP_NUM_THREADS: '2'
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import time
+          import torch, torchaudio
+          from chatterbox.tts import ChatterboxTTS
+          print('torch',torch.__version__,'cuda',torch.cuda.is_available(),flush=True)
+          torch.set_num_threads(2)
+          t=time.time()
+          model=ChatterboxTTS.from_pretrained(device='cpu')
+          print('model_loaded_seconds',round(time.time()-t,2),flush=True)
+          t=time.time()
+          txt="A surprising idea can begin with two simple pictures. AhaTrove explores the science behind everyday wonder."
+          with torch.no_grad(): wav=model.generate(txt)
+          torchaudio.save('OPEN_SOURCE_NEURAL_VOICE_REVIEW_ONLY.wav',wav,model.sr)
+          print('generation_seconds',round(time.time()-t,2),'audio_seconds',round(wav.shape[-1]/model.sr,2),flush=True)
+          PY
+          test -s OPEN_SOURCE_NEURAL_VOICE_REVIEW_ONLY.wav
+          sha256sum OPEN_SOURCE_NEURAL_VOICE_REVIEW_ONLY.wav
+      - name: Save test-only audio
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ahatrove-chatterbox-tts-evaluation
+          path: OPEN_SOURCE_NEURAL_VOICE_REVIEW_ONLY.wav
+          retention-days: 1
