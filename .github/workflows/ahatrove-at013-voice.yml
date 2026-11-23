@@ -1,0 +1,116 @@
+name: AhaTrove AT013 root bridges natural voice (local MIT Chatterbox)
+on:
+  push:
+    branches: [ahatrove-at013-root-bridges-film-20261123]
+    paths: [.github/workflows/ahatrove-at013-voice.yml]
+  workflow_dispatch:
+jobs:
+  voice:
+    runs-on: ubuntu-latest
+    timeout-minutes: 36
+    permissions:
+      contents: read
+    env:
+      HF_HUB_DISABLE_TELEMETRY: '1'
+      TORCH_NUM_THREADS: '2'
+      OMP_NUM_THREADS: '2'
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - name: Use Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install open MIT TTS (CPU only, no API)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --no-cache-dir 'torch==2.6.0' 'torchaudio==2.6.0' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --no-cache-dir 'chatterbox-tts'
+      - name: Generate AT013 original script and precise phrase timings
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import time,json,hashlib,math
+          import torch,torchaudio
+          from chatterbox.tts import ChatterboxTTS
+          torch.set_num_threads(2)
+          torch.manual_seed(17131123)
+          segments = [
+            "What kind of bridge can your grandparents begin, and your grandchildren finish?",
+            "In Meghalaya, Khasi communities have a remarkable answer.",
+            "Across rushing streams, builders guide the living aerial roots of rubber fig trees through hollow areca trunks and along bamboo supports.",
+            "The roots take years to reach the opposite bank.",
+            "More roots are guided across, and carefully woven together.",
+            "As they grow, thicken, and join, the crossing becomes strong enough to walk on.",
+            "And people keep tending the roots, adding support as the living pathway develops.",
+            "The surprise is not only the trees.",
+            "It is the care passed from one generation to the next.",
+            "These are Meghalaya's living root bridges.",
+            "Not a bridge against nature; a bridge grown with it."
+          ]
+          outdir=Path('AT013_VOICE_REVIEW_ONLY');outdir.mkdir(exist_ok=True)
+          model=ChatterboxTTS.from_pretrained(device='cpu')
+          sr=model.sr; cursor=0; chunks=[]; manifest=[]
+          for i,txt in enumerate(segments):
+            t=time.monotonic()
+            with torch.no_grad():
+              wav=model.generate(txt,exaggeration=0.58,cfg_weight=0.48).detach().cpu().float()
+            if wav.ndim==1: wav=wav.unsqueeze(0)
+            if wav.shape[0]!=1: wav=wav.mean(dim=0,keepdim=True)
+            if wav.shape[1] < sr*0.55 or wav.shape[1] > sr*20: raise ValueError(f'bad segment duration {i}')
+            if not bool(torch.isfinite(wav).all()): raise ValueError('nonfinite audio')
+            wav=wav.clamp(-0.99,0.99)
+            torchaudio.save(outdir/f'segment_{i+1:02}.wav',wav,sr)
+            end=cursor+wav.shape[-1]
+            manifest.append(dict(segment=i+1,text=txt,start_s=round(cursor/sr,3),end_s=round(end/sr,3),
+              dur_s=round(wav.shape[-1]/sr,3),rms=round(float(wav.square().mean().sqrt()),5),generation_s=round(time.monotonic()-t,2)))
+            pause=torch.zeros(1,int(sr*0.20))
+            chunks.extend((wav,pause));cursor=end+pause.shape[-1]
+            print('VOICE',i+1,len(segments),manifest[-1],flush=True)
+          master=torch.cat(chunks,dim=-1)
+          torchaudio.save(outdir/'AT013_NARRATION_UNAPPROVED.wav',master,sr)
+          duration=master.shape[-1]/sr
+          data=dict(film='AT-013',source='MIT ResembleAI/Chatterbox local CPU TTS',model_url='https://huggingface.co/ResembleAI/chatterbox',mode='draft quality-review audio; not a final release',language='English',sample_rate=sr,duration_s=round(duration,3),segments=manifest)
+          (outdir/'AT013_AUDIO_CUES.json').write_text(json.dumps(data,indent=2))
+          (outdir/'AT013_EXACT_SCRIPT.txt').write_text('\n'.join(segments)+'\n')
+          for f in outdir.glob('*.wav'):
+            print('SHA256',f.name,hashlib.sha256(f.read_bytes()).hexdigest(),flush=True)
+          print('AT013_TOTAL_SECONDS',round(duration,3),flush=True)
+          PY
+      - name: Automatic lexical QA with independently decoded transcript (not final approval)
+        shell: bash
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          python -m pip install --no-cache-dir 'faster-whisper==1.2.1'
+          python - <<'PY'
+          from pathlib import Path
+          from difflib import SequenceMatcher
+          from faster_whisper import WhisperModel
+          import json,re
+          p=Path('AT013_VOICE_REVIEW_ONLY')
+          data=json.loads((p/'AT013_AUDIO_CUES.json').read_text())
+          model=WhisperModel('base.en',device='cpu',compute_type='int8',cpu_threads=2)
+          checks=[]
+          for s in data['segments']:
+            file=p/f"segment_{s['segment']:02}.wav"
+            parts,_=model.transcribe(str(file),beam_size=5,vad_filter=False)
+            heard=' '.join(x.text for x in parts).strip()
+            expected=s['text']
+            norm=lambda x: re.sub('[^a-z0-9 ]','',x.lower())
+            score=SequenceMatcher(None,norm(expected),norm(heard)).ratio()
+            checks.append(dict(segment=s['segment'],expected=expected,heard=heard,similarity=round(score,3),pass_auto=score>=0.84))
+            print('ASR',checks[-1],flush=True)
+          (p/'AT013_ASR_REVIEW.json').write_text(json.dumps(checks,indent=2))
+          print('ALL_PASS_AUTO',all(c['pass_auto'] for c in checks),flush=True)
+          PY
+      - name: Store raw audio, timing ledger and ASR for independent listening
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: AT013-root-bridges-CHATTR-VOICE-CANDIDATE
+          path: AT013_VOICE_REVIEW_ONLY/
+          if-no-files-found: warn
+          retention-days: 2
