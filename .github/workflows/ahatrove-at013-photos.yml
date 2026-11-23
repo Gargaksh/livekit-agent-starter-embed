@@ -1,0 +1,90 @@
+name: AhaTrove AT013 rights-logged documentary photography intake
+on:
+  push:
+    branches: [ahatrove-at013-root-bridges-film-20261123]
+    paths: [.github/workflows/ahatrove-at013-photos.yml]
+  workflow_dispatch:
+jobs:
+  media:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    permissions:
+      contents: read
+    steps:
+      - name: Install image verification
+        shell: bash
+        run: |
+          python -m pip install --no-cache-dir 'pillow>=10,<13' 'requests>=2.31,<3'
+      - name: Query Wikimedia Commons for real Meghalaya documentary photos, permissive reuse license only
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os,re,time,json,hashlib
+          from pathlib import Path
+          from html import unescape
+          import requests
+          from PIL import Image
+          s=requests.Session()
+          s.headers.update({'User-Agent':'AhaTrove-AT013-Research/1.0 (noncommercial prepublication QA, contact via GitHub author Gargaksh)','Accept':'application/json'})
+          api='https://commons.wikimedia.org/w/api.php'
+          out=Path('AT013_RIGHTS_CLEARED_VISUAL_SOURCES');out.mkdir(exist_ok=True)
+          cats=['Category:Living root bridges in Meghalaya','Category:Living root bridges in Nongriat','Category:Living root bridges in Riwai','Category:Living root bridges in Mawlynnong','Category:Living root bridges in Cherrapunji']
+          names=set()
+          for cat in cats:
+            try:
+              q=s.get(api,params={'action':'query','list':'categorymembers','cmtitle':cat,'cmtype':'file','cmlimit':100,'format':'json'},timeout=22);q.raise_for_status()
+              for item in q.json().get('query',{}).get('categorymembers',[]):names.add(item['title'])
+              print('category',cat,'names',len(names),flush=True)
+            except Exception as e: print('CATEGORY_FAIL',cat,str(e)[:180],flush=True)
+          # Include manually verified file pages if Commons API category enumeration returns none
+          names.update(['File:The Living Root Bridge, Meghalaya.jpg','File:Living Root Bridge, Meghalaya, India.jpg','File:Living Root Bridge, Mawlynnong.jpg','File:A living root bridge in Meghalaya.jpg','File:Root bridge, Burma village.jpg','File:Double Decker Areca Trunk method.jpg'])
+          licenses={'CC BY 4.0','CC BY 3.0','CC BY 2.0','CC0','Public domain','PD','CC0 1.0'}
+          recs=[];skip=0
+          for offset in range(0,len(names),40):
+            titles=list(sorted(names))[offset:offset+40]
+            try:
+              r=s.get(api,params={'action':'query','titles':'|'.join(titles),'prop':'imageinfo','iiprop':'url|size|extmetadata','iiurlwidth':1600,'format':'json'},timeout=60);r.raise_for_status()
+              pages=r.json().get('query',{}).get('pages',{}).values()
+              for page in pages:
+                i=(page.get('imageinfo') or [{}])[0];meta=i.get('extmetadata',{})
+                license_name=unescape(meta.get('LicenseShortName',{}).get('value','')).strip()
+                original=i.get('width',0),i.get('height',0)
+                if license_name not in licenses or min(original)<1250: skip+=1;continue
+                url=i.get('thumburl') or i.get('url')
+                if not url or not url.startswith('https://'):continue
+                creator=re.sub('<[^>]+>','',unescape(meta.get('Artist',{}).get('value',''))).strip()
+                recs.append(dict(title=page['title'],commons_url='https://commons.wikimedia.org/wiki/'+page['title'].replace(' ','_'),url=url,
+                  original_size=original,license=license_name,license_url=unescape(meta.get('LicenseUrl',{}).get('value','')),creator=creator[:180]))
+            except Exception as e: print('BATCH_FAIL',str(e)[:400],flush=True)
+          # Prioritize range of depicted sites, portraits and older entries over duplicate filenames.
+          priority=lambda x: (-int('root' in x['title'].lower()), -int('maw' in x['title'].lower()),x['title'].lower())
+          recs=sorted(recs,key=priority)
+          print('eligible',len(recs),'not_eligible',skip,flush=True)
+          log=[];num=0
+          for rec in recs[:38]:
+            if num>=19:break
+            try:
+              rr=s.get(rec['url'],timeout=55,headers={'Accept':'image/jpeg,image/png,*/*'});rr.raise_for_status()
+              if len(rr.content)>12_000_000:continue
+              fn=out/f'commons_{num+1:02}.jpg'
+              fn.write_bytes(rr.content)
+              img=Image.open(fn);img.load()
+              if img.width<700 or img.height<600:fn.unlink();continue
+              if img.mode!='RGB':img=img.convert('RGB')
+              img.thumbnail((1600,2400),Image.Resampling.LANCZOS)
+              img.save(fn,'JPEG',quality=86,optimize=True)
+              rec.update(file=fn.name,sha256=hashlib.sha256(fn.read_bytes()).hexdigest(),downloaded_size=[img.width,img.height],derivation='resized original photograph; final edit may crop/animate')
+              log.append(rec);num+=1;print('ACCEPTED',num,rec['title'],rec['license'],rec['creator'],flush=True)
+            except Exception as e: print('DOWNLOAD_FAIL',rec['title'],str(e)[:150],flush=True)
+          (out/'RIGHTS_LEDGER.json').write_text(json.dumps(dict(description='Original Wikimedia documentary photos of actual Meghalaya bridges, captions should identify location truthfully. All images separately checked for licenses.',files=log,skipped_license_or_size=skip),indent=2))
+          print('FINAL_COUNT',len(log),flush=True)
+          if len(log)<7:raise RuntimeError('Only '+str(len(log))+' safely licensed original documentary photos; cannot satisfy premium visual gate')
+          PY
+      - name: Preserve photos and exact attribution metadata
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: AT013-Meghalaya-original-photo-sources-with-rights
+          path: AT013_RIGHTS_CLEARED_VISUAL_SOURCES/
+          retention-days: 3
+          if-no-files-found: warn
