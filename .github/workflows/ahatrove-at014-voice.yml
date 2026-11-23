@@ -1,0 +1,105 @@
+name: AhaTrove AT014 public-domain voice candidate
+on:
+  push:
+    branches: [ahatrove-at014-production-voice-20261123]
+    paths: [.github/workflows/ahatrove-at014-voice.yml]
+  workflow_dispatch:
+jobs:
+  synthesize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Piper voice engine and helpers
+        run: |
+          set -euo pipefail
+          python -m pip install --no-cache-dir 'piper-tts==1.3.0' 'numpy<3' soundfile
+      - name: Download checksum-pinned public-domain English narrator
+        run: |
+          set -euo pipefail
+          mkdir -p voice
+          curl -fL --retry 3 --connect-timeout 20 -o voice/ljspeech.onnx 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/ljspeech/high/en_US-ljspeech-high.onnx?download=true'
+          printf '5d4f08ba6a2a48c44592eed3ce56bf85e9de3dd4e20df90541ae68a8310c029a  voice/ljspeech.onnx\n' | sha256sum -c
+          curl -fL --retry 3 -o voice/ljspeech.onnx.json 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/ljspeech/high/en_US-ljspeech-high.onnx.json'
+          curl -fL --retry 3 -o voice/MODEL_CARD 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/ljspeech/high/MODEL_CARD'
+          grep -q 'License: public domain' voice/MODEL_CARD
+          grep -q 'Trained from scratch' voice/MODEL_CARD
+      - name: Synthesize exact source-grounded script, cue and master
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os,subprocess,hashlib,json,wave,struct
+          from pathlib import Path
+          import numpy as np
+          base=Path("AT014_review_only");base.mkdir(exist_ok=True)
+          # Final source script, segmented at narration phrase boundaries.
+          cues=[
+           "Imagine being handed a dull metal disc—and being told it will become a mirror.",
+           "In Aranmula, Kerala, this is a craft handed down through artisan families.",
+           "A specially prepared metal alloy is cast, shaped, and polished again and again.",
+           "There is no sheet of glass hiding beneath the finish.",
+           "The mirror itself is metal, polished to a remarkable shine.",
+           "And here's the surprise: unlike an ordinary household mirror,",
+           "the reflection happens right at the front surface.",
+           "A craftsperson can lift it and reveal a clear face in what once looked like bare metal.",
+           "Every shine comes from patient hands and knowledge passed down in this village.",
+           "It's called Aranmula Kannadi.",
+           "What looks like magic is extraordinary craftsmanship."
+          ]
+          script=" ".join(cues)
+          (base/"AT014_SCRIPT.txt").write_text(script+"\n")
+          src=[]
+          for i,c in enumerate(cues):
+           dest=base/f"phrase_{i+1:02}.wav"
+           proc=subprocess.run(["python","-m","piper","--model","voice/ljspeech.onnx","--config","voice/ljspeech.onnx.json","--output_file",str(dest),"--length-scale","0.94"],input=c.encode("utf-8"),capture_output=True,timeout=90)
+           if proc.returncode: raise RuntimeError(f"piper phrase {i+1} failed: {proc.stderr.decode(errors='replace')[-1500:]}")
+           with wave.open(str(dest),"rb") as f:
+            assert f.getnchannels()==1 and f.getsampwidth()==2
+            sr=f.getframerate()
+            b=f.readframes(f.getnframes())
+            ar=np.frombuffer(b,dtype="<i2").astype(np.float32)/32768
+            if ar.size<sr*0.6 or not np.isfinite(ar).all():raise RuntimeError("bad speech length/signal")
+            src.append((c,ar))
+          assert 20000 <= sr <= 48000
+          pause=np.zeros(round(sr*0.10),dtype=np.float32)
+          mixed=[];align=[];pos=0
+          for i,(c,a) in enumerate(src):
+           s=pos/sr;mixed.append(a);pos+=len(a);e=pos/sr
+           align.append({"shot_group":i+1,"text":c,"start_s":round(s,3),"end_s":round(e,3),"duration_s":round(e-s,3)})
+           if i<len(src)-1: mixed.append(pause);pos+=len(pause)
+          y=np.concatenate(mixed)
+          raw=base/"AT014_PIPER_LJSPEECH_VOICE_22050.wav"
+          import soundfile as sf
+          sf.write(raw,y,sr,subtype="PCM_16")
+          duration=len(y)/sr
+          if duration>60:
+            # Aligned final audio after a mild speed increase, preventing truncated final words.
+            rate=duration/58.5
+            proc=subprocess.run(["ffmpeg","-hide_banner","-loglevel","error","-y","-i",str(raw),"-af",f"atempo={rate:.6f}","-ar","48000","-ac","2",str(base/"AT014_VOICE_48K.wav")],capture_output=True)
+            assert proc.returncode==0,proc.stderr
+            for a in align:
+             for k in ["start_s","end_s","duration_s"]:a[k]=round(a[k]/rate,3)
+          else:
+            subprocess.run(["ffmpeg","-hide_banner","-loglevel","error","-y","-i",str(raw),"-ar","48000","-ac","2",str(base/"AT014_VOICE_48K.wav")],check=True)
+          subprocess.run(["ffmpeg","-hide_banner","-loglevel","error","-y","-i",str(base/"AT014_VOICE_48K.wav"),"-af","loudnorm=I=-16:TP=-1.5:LRA=9","-codec:a","libmp3lame","-b:a","128k",str(base/"AT014_VOICE_FOR_REVIEW.mp3")],check=True)
+          with wave.open(str(base/"AT014_VOICE_48K.wav"),"rb") as f:duration=f.getnframes()/f.getframerate()
+          assert 45<=duration<=60,f"narration out of range {duration:.3f}"
+          rights={"engine":"piper-tts 1.3.0","voice":"en_US-ljspeech-high","voice_model_repo":"https://huggingface.co/rhasspy/piper-voices/tree/main/en/en_US/ljspeech/high","model_sha256":"5d4f08ba6a2a48c44592eed3ce56bf85e9de3dd4e20df90541ae68a8310c029a","source_dataset":"LJ Speech","dataset_license":"public domain","source_model_card":"https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/ljspeech/high/MODEL_CARD","training":"model card states trained from scratch","publication_approval":"VOICE CANDIDATE ONLY: actual audio must be listened to for intelligibility, pronunciation, expressiveness and quality"}
+          (base/"AT014_VOICE_TIMINGS_AND_RIGHTS.json").write_text(json.dumps({"narration_seconds":round(duration,3),"cues":align,"rights":rights},indent=2))
+          (base/"AT014_MODEL_CARD.txt").write_text(Path("voice/MODEL_CARD").read_text())
+          for p in base.iterdir():
+           if p.is_file():print(p.name,p.stat().st_size,hashlib.sha256(p.read_bytes()).hexdigest())
+          print("final_voice_duration_seconds",duration,flush=True)
+          PY
+      - name: Archive source-grounded voice, exact phrase cues and provenance
+        uses: actions/upload-artifact@v4
+        with:
+          name: AT014-public-domain-Piper-VOICE-REVIEW-ONLY
+          path: AT014_review_only/
+          retention-days: 3
+          if-no-files-found: error
