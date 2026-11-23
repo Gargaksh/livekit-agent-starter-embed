@@ -1,0 +1,47 @@
+name: AhaTrove AT008 natural voice A-B (free public runner, REVIEW ONLY)
+on:
+  push:
+    branches:
+      - ahatrove-at008-voice-20261123
+    paths:
+      - .github/workflows/ahatrove-at008-kokoro-review.yml
+  workflow_dispatch:
+jobs:
+  review-voice:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      OMP_NUM_THREADS: "2"
+      TORCH_NUM_THREADS: "2"
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install open-source CPU engine and English phonemizer
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq espeak-ng
+          python -m pip install --no-cache-dir 'torch==2.6.0' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --no-cache-dir 'kokoro==0.9.4' 'soundfile>=0.12,<0.14'
+      - name: Produce natural English A-B master auditions and actual sample timings
+        shell: bash
+        run: |
+          set -euo pipefail
+          python production/ahatrove/at008_kokoro_review_only.py
+          test -s at008_kokoro_review_only/VOICE_AUDITION_RIGHTS_AND_TIMINGS.json
+          sha256sum at008_kokoro_review_only/*.wav
+      - name: Upload draft audio for independent listening; no video master or publication
+        uses: actions/upload-artifact@v4
+        with:
+          name: AT008-Kokoro-Voice-AB-REVIEW-ONLY
+          path: at008_kokoro_review_only/
+          retention-days: 1
+          if-no-files-found: error
