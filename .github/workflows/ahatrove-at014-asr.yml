@@ -1,0 +1,51 @@
+name: AhaTrove AT014 independent ASR word audit
+on:
+  push:
+    branches: [ahatrove-at014-production-voice-20261123]
+    paths: [.github/workflows/ahatrove-at014-asr.yml]
+  workflow_dispatch:
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 24
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - uses: actions/download-artifact@v4
+        with:
+          name: AT014-public-domain-Piper-VOICE-REVIEW-ONLY
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 45107834016
+          path: voice/
+      - name: Speech recognition as independent text and timestamp audit
+        run: |
+          set -euo pipefail
+          pip install --no-cache-dir faster-whisper==1.2.1
+          python - <<'PY'
+          import json,difflib,re,hashlib
+          from pathlib import Path
+          from faster_whisper import WhisperModel
+          p=Path('voice'); assert (p/'AT014_VOICE_48K.wav').stat().st_size>3000000
+          expected=(p/'AT014_SCRIPT.txt').read_text().strip()
+          model=WhisperModel('base.en',device='cpu',compute_type='int8',num_workers=2)
+          segments,info=model.transcribe(str(p/'AT014_VOICE_48K.wav'),beam_size=5,word_timestamps=True,language='en',vad_filter=False,condition_on_previous_text=False)
+          items=list(segments)
+          found=' '.join(x.text.strip() for x in items)
+          words=[dict(word=w.word,start=round(w.start or 0,3),end=round(w.end or 0,3),prob=round(w.probability,4)) for x in items for w in (x.words or [])]
+          normal=lambda s:re.sub(r'[^a-z0-9 ]+',' ',s.lower()).split()
+          e=normal(expected);f=normal(found);ratio=difflib.SequenceMatcher(None,e,f).ratio()
+          out={'source':'faster-whisper/base.en','script':expected,'transcript':found,'expected_words':len(e),'asr_words':len(f),'normalized_similarity':round(ratio,4),'word_timestamps':words,'phrases':[{'start':x.start,'end':x.end,'text':x.text} for x in items], 'status':'ASR advisory, requires listening review'}
+          (p/'AT014_ASR_REVIEW.json').write_text(json.dumps(out,indent=2))
+          print(json.dumps({k:out[k] for k in ['transcript','expected_words','asr_words','normalized_similarity']},indent=2))
+          if ratio<.78:raise RuntimeError('Substantial narration versus source-script mismatch')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AT014-independent-ASR-word-timings
+          path: voice/AT014_ASR_REVIEW.json
+          retention-days: 3
+          if-no-files-found: error
