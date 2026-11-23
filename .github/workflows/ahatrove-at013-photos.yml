@@ -38,7 +38,7 @@ jobs:
             except Exception as e: print('CATEGORY_FAIL',cat,str(e)[:180],flush=True)
           # Include manually verified file pages if Commons API category enumeration returns none
           names.update(['File:The Living Root Bridge, Meghalaya.jpg','File:Living Root Bridge, Meghalaya, India.jpg','File:Living Root Bridge, Mawlynnong.jpg','File:A living root bridge in Meghalaya.jpg','File:Root bridge, Burma village.jpg','File:Double Decker Areca Trunk method.jpg'])
-          licenses={'CC BY 4.0','CC BY 3.0','CC BY 2.0','CC0','Public domain','PD','CC0 1.0'}
+          licenses={'CC BY 4.0','CC BY 3.0','CC BY 2.0','CC0','Public domain','PD','CC0 1.0','CC BY-SA 4.0','CC BY-SA 3.0','CC BY-SA 2.0'}
           recs=[];skip=0
           for offset in range(0,len(names),40):
             titles=list(sorted(names))[offset:offset+40]
@@ -61,8 +61,8 @@ jobs:
           recs=sorted(recs,key=priority)
           print('eligible',len(recs),'not_eligible',skip,flush=True)
           log=[];num=0
-          for rec in recs[:38]:
-            if num>=19:break
+          for rec in recs[:80]:
+            if num>=22:break
             try:
               rr=s.get(rec['url'],timeout=55,headers={'Accept':'image/jpeg,image/png,*/*'});rr.raise_for_status()
               if len(rr.content)>12_000_000:continue
@@ -76,9 +76,9 @@ jobs:
               rec.update(file=fn.name,sha256=hashlib.sha256(fn.read_bytes()).hexdigest(),downloaded_size=[img.width,img.height],derivation='resized original photograph; final edit may crop/animate')
               log.append(rec);num+=1;print('ACCEPTED',num,rec['title'],rec['license'],rec['creator'],flush=True)
             except Exception as e: print('DOWNLOAD_FAIL',rec['title'],str(e)[:150],flush=True)
-          (out/'RIGHTS_LEDGER.json').write_text(json.dumps(dict(description='Original Wikimedia documentary photos of actual Meghalaya bridges, captions should identify location truthfully. All images separately checked for licenses.',files=log,skipped_license_or_size=skip),indent=2))
+          (out/'RIGHTS_LEDGER.json').write_text(json.dumps(dict(description='Original Wikimedia documentary photos of actual Meghalaya bridges. CC BY-SA materials are commercially reusable subject to credit, indication of crops and ShareAlike licensing of adapted image work; publishing remains on HOLD until conditions approved. Captions should identify location truthfully. Each asset carries rights metadata.',files=log,skipped_license_or_size=skip),indent=2))
           print('FINAL_COUNT',len(log),flush=True)
-          if len(log)<7:raise RuntimeError('Only '+str(len(log))+' safely licensed original documentary photos; cannot satisfy premium visual gate')
+          if len(log)<15:raise RuntimeError('Only '+str(len(log))+' documented CC licensed original documentary photos; cannot satisfy premium visual gate')
           PY
       - name: Preserve photos and exact attribution metadata
         if: always()
