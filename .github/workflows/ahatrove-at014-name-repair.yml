@@ -1,0 +1,64 @@
+name: AhaTrove AT014 local-name phonetic repair audition
+on:
+  push:
+    branches: [ahatrove-at014-production-voice-20261123]
+    paths: [.github/workflows/ahatrove-at014-name-repair.yml]
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - uses: actions/download-artifact@v4
+        with:
+          name: AT014-public-domain-Piper-VOICE-REVIEW-ONLY
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 45107834016
+          path: original/
+      - name: Setup one public-domain TTS source and independent ASR
+        run: |
+          set -euo pipefail
+          pip install --no-cache-dir 'piper-tts==1.3.0' 'numpy<3' soundfile 'faster-whisper==1.2.1'
+          mkdir -p voice
+          curl -fsSL -o voice/ljspeech.onnx 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/ljspeech/high/en_US-ljspeech-high.onnx?download=true'
+          printf '5d4f08ba6a2a48c44592eed3ce56bf85e9de3dd4e20df90541ae68a8310c029a  voice/ljspeech.onnx\n' | sha256sum -c
+          curl -fsSL -o voice/ljspeech.onnx.json 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/ljspeech/high/en_US-ljspeech-high.onnx.json'
+          sudo apt-get update -qq; sudo apt-get install -y -qq ffmpeg >/dev/null
+      - name: Test local-name pronunciation variants in the exact surrounding sentences
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import subprocess,json,wave,difflib,re
+          from pathlib import Path
+          from faster_whisper import WhisperModel
+          out=Path('AT014_phonetic_auditions');out.mkdir(exist_ok=True)
+          variations={
+           'A_ah_run_moo_la':('In Ah-run-moo-la, Kerala, this is a craft handed down through artisan families.',"It's called Ah-run-moo-la Kahn-nah-dee."),
+           'B_ah_run_moola':('In Ah-run-moola, Kerala, this is a craft handed down through artisan families.',"It's called Ah-run-moola Kahn-ah-dee."),
+           'C_aaran_mula':('In Aa-ran-mu-la, Kerala, this is a craft handed down through artisan families.',"It's called Aa-ran-mu-la Kanna-di.")
+          }
+          model=WhisperModel('base.en',device='cpu',compute_type='int8',num_workers=2)
+          res=[]
+          for v,phrases in variations.items():
+           for i,p in enumerate(phrases):
+            dest=out/f'{v}_{i+1}.wav'
+            run=subprocess.run(['python','-m','piper','--model','voice/ljspeech.onnx','--config','voice/ljspeech.onnx.json','--output_file',str(dest),'--length-scale','0.94'],input=p.encode(),capture_output=True,timeout=60)
+            if run.returncode:raise RuntimeError(run.stderr.decode())
+            segs,info=model.transcribe(str(dest),language='en',beam_size=3,condition_on_previous_text=False)
+            asr=' '.join(s.text.strip() for s in segs)
+            with wave.open(str(dest),'rb') as f:duration=f.getnframes()/f.getframerate()
+            res.append({'candidate':v,'phrase':i+1,'spoken_input':p,'asr':asr,'duration':round(duration,3),'file':dest.name})
+            print(v,i+1,asr,flush=True)
+          (out/'audit.json').write_text(json.dumps(res,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AT014-Name-Pronunciation-AB-REVIEW-ONLY
+          path: AT014_phonetic_auditions/
+          retention-days: 2
+          if-no-files-found: error
