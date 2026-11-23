@@ -36,19 +36,22 @@ jobs:
           import torch,torchaudio
           from chatterbox.tts import ChatterboxTTS
           torch.set_num_threads(2)
-          torch.manual_seed(17131123)
+          torch.manual_seed(17131124)
           segments = [
             "What kind of bridge can your grandparents begin, and your grandchildren finish?",
-            "In Meghalaya, Khasi communities have a remarkable answer.",
-            "Across rushing streams, builders guide the living aerial roots of rubber fig trees through hollow areca trunks and along bamboo supports.",
-            "The roots take years to reach the opposite bank.",
-            "More roots are guided across, and carefully woven together.",
-            "As they grow, thicken, and join, the crossing becomes strong enough to walk on.",
-            "And people keep tending the roots, adding support as the living pathway develops.",
-            "The surprise is not only the trees.",
-            "It is the care passed from one generation to the next.",
+            "In Meghalaya, Kha-see communities have a remarkable answer.",
+            "Rain can turn small mountain streams into powerful rivers. The crossing still matters.",
+            "Builders guide the long aerial roots of rubber fig trees across the water, using hollow betel-nut palm trunks and bamboo for support.",
+            "At first, the roots look like delicate threads.",
+            "Years pass before they reach the far bank.",
+            "More roots are guided across, then carefully woven together.",
+            "The living roots grow thicker. Eventually, they join into a crossing strong enough to walk on.",
+            "The supports can change, but the tree keeps growing.",
+            "And people keep tending the roots, strengthening the pathway for those who come after.",
+            "This isn't just clever engineering.",
+            "It's an act of care, passed from one generation to the next.",
             "These are Meghalaya's living root bridges.",
-            "Not a bridge against nature; a bridge grown with it."
+            "Not built against nature, grown together with it."
           ]
           outdir=Path('AT013_VOICE_REVIEW_ONLY');outdir.mkdir(exist_ok=True)
           model=ChatterboxTTS.from_pretrained(device='cpu')
