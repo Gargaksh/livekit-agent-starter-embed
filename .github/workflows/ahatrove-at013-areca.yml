@@ -1,0 +1,43 @@
+name: AhaTrove AT013 factual areca root-guide visual intake
+on:
+  push:
+    branches: [ahatrove-at013-root-bridges-film-20261123]
+    paths: [.github/workflows/ahatrove-at013-areca.yml]
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: read
+    steps:
+      - name: Download exact CC BY-SA original image, preserving attribution
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import requests,json,hashlib,os
+          from PIL import Image
+          from pathlib import Path
+          out=Path('AT013_ARECA_GUIDE');out.mkdir(exist_ok=True)
+          ses=requests.Session();ses.headers['User-Agent']='AhaTrove-AT013/1.0 editorial rights audit (GitHub Gargaksh)'
+          target='File:Double Decker Areca Trunk method.jpg'
+          p={'action':'query','titles':target,'prop':'imageinfo','iiprop':'url|size|extmetadata','iiurlwidth':1600,'format':'json'}
+          response=ses.get('https://commons.wikimedia.org/w/api.php',params=p,timeout=30);response.raise_for_status()
+          item=next(iter(response.json()['query']['pages'].values()))['imageinfo'][0]
+          meta=item['extmetadata'];lic=meta['LicenseShortName']['value']
+          if lic!='CC BY-SA 4.0':raise RuntimeError('Unknown license '+lic)
+          url=item.get('thumburl') or item['url'];data=ses.get(url,timeout=40);data.raise_for_status()
+          path=out/'AT013_areca_trunk_actual_photo.jpg';path.write_bytes(data.content)
+          img=Image.open(path).convert('RGB');img.thumbnail((1600,2400));img.save(path,'JPEG',quality=90,optimize=True)
+          ledger=dict(photographer='Elbowmacaroni',source_url='https://commons.wikimedia.org/wiki/File:Double_Decker_Areca_Trunk_method.jpg',
+            license='CC BY-SA 4.0',license_url='https://creativecommons.org/licenses/by-sa/4.0',caption='Root bridge being formed with areca palm trunk support, Nongriat, Meghalaya (author description)',
+            file=path.name,sha256=hashlib.sha256(path.read_bytes()).hexdigest(),image_size=img.size)
+          (out/'RIGHTS_LEDGER.json').write_text(json.dumps(ledger,indent=2))
+          print(ledger,flush=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: AT013-Areca-Guide-Verified-Photo
+          path: AT013_ARECA_GUIDE/
+          retention-days: 2
+          if-no-files-found: warn
