@@ -86,7 +86,10 @@ jobs:
             for a in align:
              for k in ["start_s","end_s","duration_s"]:a[k]=round(a[k]/rate,3)
           else:
-            subprocess.run(["ffmpeg","-hide_banner","-loglevel","error","-y","-i",str(raw),"-ar","48000","-ac","2",str(base/"AT014_VOICE_48K.wav")],check=True)
+            rate=duration/48.0
+            subprocess.run(["ffmpeg","-hide_banner","-loglevel","error","-y","-i",str(raw),"-af",f"atempo={rate:.6f}","-ar","48000","-ac","2",str(base/"AT014_VOICE_48K.wav")],check=True)
+            for a in align:
+             for k in ["start_s","end_s","duration_s"]:a[k]=round(a[k]/rate,3)
           subprocess.run(["ffmpeg","-hide_banner","-loglevel","error","-y","-i",str(base/"AT014_VOICE_48K.wav"),"-af","loudnorm=I=-16:TP=-1.5:LRA=9","-codec:a","libmp3lame","-b:a","128k",str(base/"AT014_VOICE_FOR_REVIEW.mp3")],check=True)
           with wave.open(str(base/"AT014_VOICE_48K.wav"),"rb") as f:duration=f.getnframes()/f.getframerate()
           assert 45<=duration<=60,f"narration out of range {duration:.3f}"
