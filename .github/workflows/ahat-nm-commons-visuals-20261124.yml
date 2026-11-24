@@ -1,0 +1,48 @@
+name: AhaTrove NM001 research-sourced public-domain art recovery
+on:
+  push:
+    branches: [ahat-nm-audio-recovery-20261124]
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    permissions:
+      contents: read
+    steps:
+      - name: Recover and verify public-license historical source artworks
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p images
+          python - <<'PY'
+          import urllib.parse,subprocess,pathlib,time,json
+          files={
+            'capsicum1554.png':'Breet Peper van Indien 678 Dodoens 1554.png',
+            'capsicum1543.jpg':'Langer Indianischer Pfeffer Leonhart Fuchs 1543.jpg',
+            'capsicum_botanical.jpg':'Illustration Capsicum annuum0.jpg',
+            'caravel_16th.jpg':'Caravel from the Convent of Madre de Deus, Lisbon.jpg',
+            'portugal_calicut1500.jpg':'Portuguese expedition to Calicut, 1500.jpg',
+            'calicut_1900painting.jpg':'A chegada de Vasco da Gama a Calicute em 1498.jpg',
+            'portuguese_fort_calicut.jpg':'Portuguese fort at Calicut.jpg',
+            'vasco_arrival_tapestry.jpg':"Vasco da Gama's arrival at Calicut.jpg",
+          }
+          ledger={}
+          for output,fname in files.items():
+            url='https://commons.wikimedia.org/wiki/Special:FilePath/'+urllib.parse.quote(fname.replace(' ','_'),safe='()_,.')
+            cmd=['curl','-A','AhaTrove educational content provenance research (contact Wikimedia)','-fL','--retry','2','--connect-timeout','15','--max-time','65','-o','images/'+output,url]
+            p=subprocess.run(cmd,capture_output=True,text=True)
+            size=pathlib.Path('images/'+output).stat().st_size if pathlib.Path('images/'+output).exists() else 0
+            ledger[output]={'commons_file':fname,'source_url':'https://commons.wikimedia.org/wiki/File:'+urllib.parse.quote(fname.replace(' ','_')),'bytes':size,'curl_status':p.returncode}
+            print(output,size,'ok' if p.returncode==0 else 'failed',flush=True)
+            if p.returncode!=0:print('curl_error',p.stderr[-250:],flush=True)
+          pathlib.Path('images/SOURCE_LEDGER.json').write_text(json.dumps(ledger,indent=2))
+          if not any(x['bytes']>5000 for x in ledger.values()):raise RuntimeError('No source files retrieved')
+          PY
+          file images/* | head -30
+      - name: Save source asset package
+        uses: actions/upload-artifact@v4
+        with:
+          name: AhaTrove-NM001-Commons-PD-Visuals
+          path: images/
+          if-no-files-found: error
+          retention-days: 2
