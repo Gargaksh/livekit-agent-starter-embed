@@ -21,10 +21,31 @@ jobs:
               print('SECONDS',w.getnframes()/w.getframerate(),'channels',w.getnchannels(),'rate',w.getframerate())
           print('SHA256',hashlib.sha256(open('kokoro_narration.wav','rb').read()).hexdigest())
           PY
+      - name: Independent ASR check for truncated text
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet faster-whisper==1.2.0
+          python - <<'PY'
+          from faster_whisper import WhisperModel
+          from pathlib import Path
+          import json,hashlib
+          m=WhisperModel('tiny.en',device='cpu',compute_type='int8',cpu_threads=2)
+          segs,meta=m.transcribe('kokoro_narration.wav',beam_size=2,vad_filter=False,word_timestamps=True)
+          arr=list(segs)
+          words=[{'start':round(w.start,3),'end':round(w.end,3),'word':w.word} for seg in arr for w in (seg.words or [])]
+          txt=' '.join(seg.text.strip() for seg in arr)
+          Path('narration_asr.txt').write_text(txt+'\n')
+          Path('narration_words.json').write_text(json.dumps(words,indent=2))
+          print('ASR_WORD_COUNT',len(words),'ASR_LAST_END',words[-1]['end'] if words else 0,flush=True)
+          print('ASR_TEXT_SHA',hashlib.sha256(txt.encode()).hexdigest(),flush=True)
+          PY
       - name: Preserve user-requested review audio
         uses: actions/upload-artifact@v4
         with:
           name: AhaTrove-NM001-Kokoro-Audio-Review
           path: |
             kokoro_narration.wav
+            narration_asr.txt
+            narration_words.json
           retention-days: 1
