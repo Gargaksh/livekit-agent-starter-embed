@@ -15,14 +15,16 @@ jobs:
           set -euo pipefail
           curl --retry 3 --connect-timeout 20 --max-time 120 -L --fail --show-error -o kokoro_narration.wav 'https://hexgrad-kokoro-tts.hf.space/gradio_api/file=/tmp/gradio/c72ed654b5b387ff6b85384195789294a7443e91db5f0555aac1c842476767a6/audio.wav'
           test -s kokoro_narration.wav
-          ffprobe -v error -show_format -show_streams kokoro_narration.wav | head -90
-          sha256sum kokoro_narration.wav
-          ffmpeg -v warning -y -i kokoro_narration.wav -af loudnorm=I=-17:TP=-2:LRA=10 -ar 48000 -ac 2 -codec:a libmp3lame -b:a 192k narration_normalized.mp3
+          python - <<'PY'
+          import wave, hashlib
+          with wave.open('kokoro_narration.wav','rb') as w:
+              print('SECONDS',w.getnframes()/w.getframerate(),'channels',w.getnchannels(),'rate',w.getframerate())
+          print('SHA256',hashlib.sha256(open('kokoro_narration.wav','rb').read()).hexdigest())
+          PY
       - name: Preserve user-requested review audio
         uses: actions/upload-artifact@v4
         with:
           name: AhaTrove-NM001-Kokoro-Audio-Review
           path: |
             kokoro_narration.wav
-            narration_normalized.mp3
           retention-days: 1
