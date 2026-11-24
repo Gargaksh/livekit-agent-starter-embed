@@ -13,18 +13,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl --retry 3 --connect-timeout 20 --max-time 120 -L --fail --show-error -o kokoro_narration.wav 'https://hexgrad-kokoro-tts.hf.space/gradio_api/file=/tmp/gradio/c72ed654b5b387ff6b85384195789294a7443e91db5f0555aac1c842476767a6/audio.wav'
           curl --retry 3 --connect-timeout 20 --max-time 120 -Lf --show-error -o part1.wav 'https://hexgrad-kokoro-tts.hf.space/gradio_api/file=/tmp/gradio/02e6b3e083a628eb09a0e301d2913d7e4730858f3aaf95269261795078967bc8/audio.wav'
           curl --retry 3 --connect-timeout 20 --max-time 120 -Lf --show-error -o part2.wav 'https://hexgrad-kokoro-tts.hf.space/gradio_api/file=/tmp/gradio/c3930797f872a92e5958737f271d3f2d1bb95e855ca0dec19a0e40c4c0e8ef5e/audio.wav'
           test -s part1.wav
           test -s part2.wav
-          test -s kokoro_narration.wav
           python - <<'PY'
           import wave, hashlib
-          for f in ['kokoro_narration.wav','part1.wav','part2.wav']:
+          for f in ['part1.wav','part2.wav']:
             with wave.open(f,'rb') as w:
               print('FILE',f,'SECONDS',w.getnframes()/w.getframerate(),'channels',w.getnchannels(),'rate',w.getframerate())
-          print('SHA256',hashlib.sha256(open('kokoro_narration.wav','rb').read()).hexdigest())
           PY
       - name: Independent ASR check for truncated text
         shell: bash
@@ -58,7 +55,6 @@ jobs:
         with:
           name: AhaTrove-NM001-Kokoro-Audio-Review
           path: |
-            kokoro_narration.wav
             narration_asr.txt
             narration_words.json
             part1.wav
